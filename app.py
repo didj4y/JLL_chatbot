@@ -1,62 +1,51 @@
 import os
 import streamlit as st
-from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
+from openai import OpenAI
 from dotenv import load_dotenv
 
-# Charger la clé API
 load_dotenv()
-MISTRAL_API_KEY = st.secrets["MISTRAL_API_KEY"]
-client = MistralClient(api_key=MISTRAL_API_KEY)
 
-# Charger le contexte réseau depuis un fichier
-with open("reseau_context.txt", "r", encoding="utf-8") as file:
-    reseau_context = file.read()
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-# Titre de l'application
-st.title("🔧 Chatbot Réseau - Spécialiste Cisco/Juniper")
-st.markdown("Posez-moi une question technique sur les réseaux.")
+client = OpenAI(
+    api_key=GEMINI_API_KEY, 
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
 
-# Initialiser l'historique de la conversation
+# Charger le contexte réseau
+with open("reseaucontext.txt", "r", encoding="utf-8") as file:
+    reseaucontext = file.read()
+
+st.title("Chatbot JLL - Support")
+st.markdown("Quel est votre problème ?")
+
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        ChatMessage(role="assistant", content="Bonjour ! Je suis votre expert réseau. Posez-moi une question technique.")
+        {"role": "assistant", "content": "Bonjour ! Pose moi ta question"}
     ]
 
-# Afficher l'historique des messages
 for message in st.session_state.messages:
-    with st.chat_message(message.role):
-        st.markdown(message.content)
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-# Champ de saisie pour l'utilisateur
 if prompt := st.chat_input("Votre question..."):
-    st.session_state.messages.append(ChatMessage(role="user", content=prompt))
+    st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Préparer les messages pour Mistral AI avec le contexte réseau
-    mistral_messages = [
-        ChatMessage(role="system", content=f"""
-        Tu es un expert réseau senior spécialisé dans Cisco, Juniper et Meraki.
-        Voici des informations pour t'aider à répondre :
-        {reseau_context}
-
-        Règles :
-        1. Réponds uniquement aux questions techniques réseau.
-        2. Utilise des exemples de configuration CLI si nécessaire.
-        3. Sois précis et pédagogique.
-        """),
-        *st.session_state.messages
+    gemini_messages = [
+        {"role": "system", "content": f"Tu es un expert en informatique senior spécialisé... Voici des informations pour t’aider à répondre : {reseaucontext} Règles : 1. ..."},
     ]
 
-    # Appeler l'API Mistral
+    gemini_messages += st.session_state.messages
+
     with st.spinner("Réflexion en cours..."):
-        chat_response = client.chat(model="mistral-tiny", messages=mistral_messages)
+        response = client.chat.completions.create(
+            model="gemini-2.5-pro",  # ou gemini-2.5-flash selon ton abonnement
+            messages=gemini_messages
+        )
+        assistant_response = response.choices[0].message.content
+        st.session_state.messages.append({"role": "assistant", "content": assistant_response})
 
-    # Ajouter la réponse à l'historique
-    assistant_response = chat_response.choices[0].message
-    st.session_state.messages.append(assistant_response)
-
-    # Afficher la réponse
     with st.chat_message("assistant"):
-        st.markdown(assistant_response.content)
+        st.markdown(assistant_response)
